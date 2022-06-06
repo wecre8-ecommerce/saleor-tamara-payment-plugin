@@ -20,6 +20,7 @@ def process_payment_using_frames(
 ):
     """Process a payment using the Checkout client."""
     from  saleor.payment import TransactionKind
+    from  saleor.payment.interface import GatewayResponse
 
     response = GatewayResponse(
         error=None,

@@ -6,7 +6,7 @@ setup(
     packages=["checkout_payment"],
     package_dir={"checkout_payment": "checkout_payment"},
     description="Checkout payment plugin",
-    install_requires=["checkout-sdk"],
+    install_requires=["checkout-sdk==2.0b8"],
     entry_points={
         "saleor.plugins": ["checkout_payment = checkout_payment.plugin:CheckoutGatewayPlugin"],
     },

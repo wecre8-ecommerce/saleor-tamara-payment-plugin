@@ -83,7 +83,7 @@ def _error_response(
     raw_response: dict = None,
     action_required: bool = False,
 ):
-    from saleor.payment.interface import GatewayResponse
+    from saleor.payment.interface import GatewayResponse, PaymentMethodInfo
 
     return GatewayResponse(
         error=exc,
