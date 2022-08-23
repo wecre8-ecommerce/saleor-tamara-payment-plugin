@@ -1,1 +1,1 @@
-# saleor-checkout-payment-plugin
+# saleor-tamara-plugin

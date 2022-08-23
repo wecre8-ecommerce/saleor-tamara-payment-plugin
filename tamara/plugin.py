@@ -1,54 +1,59 @@
-import json
 import logging
-import os
 
 import requests
 from django.core.exceptions import ValidationError
-from django.http import HttpRequest, HttpResponseNotFound, JsonResponse
+from django.http import HttpRequest, HttpResponseNotFound
 from django.utils.translation import gettext_lazy as _
-
 from saleor.graphql.core.enums import PluginErrorCode
-from saleor.payment.gateways.adyen.utils.apple_pay import (
-    validate_payment_data_for_apple_pay,
-)
+from saleor.order.models import Order
 from saleor.payment.gateways.utils import (
     get_supported_currencies,
     require_active_plugin,
 )
-from saleor.payment.interface import GatewayResponse, PaymentData, GatewayConfig
+from saleor.payment.interface import GatewayConfig, GatewayResponse, PaymentData
 from saleor.plugins.base_plugin import BasePlugin, ConfigurationTypeField
 from saleor.plugins.models import PluginConfiguration
 
-from checkout_payment import capture, confirm_payment, process_payment, refund
-from checkout_payment.utils import handle_webhook
+from tamara import (
+    cancel_tamara_payment,
+    capture_tamara_payment,
+    confirm_tamara_payment,
+    handle_tamara_authorization,
+    handle_tamara_webhook,
+    process_tamara_payment,
+    refund_tamara_payment,
+)
+from tamara.utils import get_base_api_url
 
-GATEWAY_NAME = str(_("Credit Card"))
+GATEWAY_NAME = str(_("Tamara"))
 
 logger = logging.getLogger(__name__)
 
 
-class CheckoutGatewayPlugin(BasePlugin):
+class TamaraGatewayPlugin(BasePlugin):
     PLUGIN_NAME = GATEWAY_NAME
-    PLUGIN_ID = "payments.checkout"
+    PLUGIN_ID = "payments.tamara"
     CONFIGURATION_PER_CHANNEL = False
+    PLUGIN_DESCRIPTION = "Tamara payment integration plugin"
 
     DEFAULT_CONFIGURATION = [
+        {"name": "signature", "value": ""},
+        {"name": "api_token", "value": None},
         {"name": "use_sandbox", "value": True},
-        {"name": "public_api_key", "value": None},
-        {"name": "secret_api_key", "value": None},
+        {"name": "notification_token", "value": None},
         {"name": "supported_currencies", "value": "SAR"},
     ]
 
     CONFIG_STRUCTURE = {
-        "public_api_key": {
+        "api_token": {
             "type": ConfigurationTypeField.SECRET,
-            "help_text": "Provide  public API key",
-            "label": "Public API key",
+            "help_text": "Provide your API token",
+            "label": "API Token",
         },
-        "secret_api_key": {
+        "notification_token": {
             "type": ConfigurationTypeField.SECRET,
-            "help_text": "Provide Checkout secret API key",
-            "label": "Secret API key",
+            "help_text": "Provide your Notification token",
+            "label": "Notification Token",
         },
         "use_sandbox": {
             "type": ConfigurationTypeField.BOOLEAN,
@@ -60,6 +65,11 @@ class CheckoutGatewayPlugin(BasePlugin):
             "help_text": "Supported Currencies for Checkout",
             "label": "Supported Currencies",
         },
+        "signature": {
+            "type": ConfigurationTypeField.STRING,
+            "help_text": "Tamara Signature",
+            "label": "Tamara Signature",
+        },
     }
 
     def __init__(self, *args, **kwargs):
@@ -69,9 +79,10 @@ class CheckoutGatewayPlugin(BasePlugin):
             auto_capture=True,
             gateway_name=GATEWAY_NAME,
             connection_params={
+                "signature": configuration["signature"],
                 "sandbox": configuration["use_sandbox"],
-                "public_key": configuration["public_api_key"],
-                "private_key": configuration["secret_api_key"],
+                "api_token": configuration["api_token"],
+                "notification_token": configuration["notification_token"],
             },
             supported_currencies=configuration["supported_currencies"],
         )
@@ -86,10 +97,8 @@ class CheckoutGatewayPlugin(BasePlugin):
         missing_fields = []
         configuration = plugin_configuration.configuration
         configuration = {item["name"]: item["value"] for item in configuration}
-        if not configuration["public_api_key"]:
-            missing_fields.append("public_api_key")
-        if not configuration["secret_api_key"]:
-            missing_fields.append("secret_api_key")
+        if not configuration["api_token"]:
+            missing_fields.append("api_token")
 
         if plugin_configuration.active and missing_fields:
             error_msg = (
@@ -106,18 +115,35 @@ class CheckoutGatewayPlugin(BasePlugin):
                 },
             )
 
-    def get_client_token(self):
-        return self.config.connection_params.get("public_key")
+    @require_active_plugin
+    def get_payment_config(self, previous_value):
+        config = self._get_gateway_config()
+        api_token = config.connection_params["api_token"]
+        base_api_url = f"{get_base_api_url(config=config)}/checkout/payment-types"
+        response = requests.get(
+            url=base_api_url,
+            headers={"Authorization": f"Bearer {api_token}"},
+            params={"country": "SA", "currency": "SAR", "order_value": 100},
+        ).json()
+        return [
+            {
+                "value": response,
+                "field": "tamara_payment_types",
+            }
+        ]
 
     @require_active_plugin
     def get_supported_currencies(self, previous_value):
         return get_supported_currencies(self.config, self.PLUGIN_NAME)
 
+    def token_is_required_as_payment_input(self, previous_value):
+        return False
+
     @require_active_plugin
     def process_payment(
         self, payment_information: "PaymentData", previous_value
     ) -> "GatewayResponse":
-        return process_payment(
+        return process_tamara_payment(
             payment_information=payment_information, config=self._get_gateway_config()
         )
 
@@ -125,66 +151,43 @@ class CheckoutGatewayPlugin(BasePlugin):
     def capture_payment(
         self, payment_information: "PaymentData", previous_value
     ) -> "GatewayResponse":
-        return capture(payment_information, self._get_gateway_config())
+        return capture_tamara_payment(payment_information, self._get_gateway_config())
 
     @require_active_plugin
     def refund_payment(
         self, payment_information: "PaymentData", previous_value
     ) -> "GatewayResponse":
-        return refund(payment_information, self._get_gateway_config())
+        return refund_tamara_payment(payment_information, self._get_gateway_config())
 
     @require_active_plugin
     def confirm_payment(
         self, payment_information: "PaymentData", previous_value
     ) -> "GatewayResponse":
-        return confirm_payment(payment_information, self._get_gateway_config())
+        return confirm_tamara_payment(payment_information, self._get_gateway_config())
 
     @require_active_plugin
-    def get_payment_config(self, previous_value):
-        config = self._get_gateway_config()
-        return [{"field": "api_key", "value": config.connection_params["public_key"]}]
+    def order_cancelled(self, order: "Order", previous_value):
+        last_payment = order.get_last_payment()
+        if last_payment.gateway == self.PLUGIN_ID:
+            cancel_tamara_payment(last_payment, self._get_gateway_config())
+        return previous_value
 
     def webhook(self, request: HttpRequest, path: str, *args, **kwargs):
-        if path == "/paid/" and request.method == "POST":
-            response = handle_webhook(
+        if path == "/subscribe/" and request.method == "POST":
+            response = handle_tamara_webhook(
                 request=request,
                 gateway=self.PLUGIN_ID,
                 config=self._get_gateway_config(),
             )
-            logger.info(msg="Finish handling webhook")
+            logger.info(msg=f"Finish handling {self.PLUGIN_ID} webhook")
             return response
-        elif path == "/apple-pay/validate-session/" and request.method == "POST":
-            # Apple Pay session
-            payment_data = json.loads(request.body.decode("utf-8").replace("'", '"'))
-            display_name = payment_data.get("displayName", "")
-            validation_url = payment_data.get("validationUrl", "")
-            initiative_context = payment_data.get("initiativeContext", "")
-            merchant_identifier = payment_data.get("merchantIdentifier", "")
-
-            payment_data = {
-                "initiative": "web",
-                "displayName": display_name,
-                "validationUrl": validation_url,
-                "initiativeContext": initiative_context,
-                "merchantIdentifier": merchant_identifier,
-            }
-            validate_payment_data_for_apple_pay(
-                certificate="certificate",
-                domain=initiative_context,
-                display_name=display_name,
-                validation_url=validation_url,
-                merchant_identifier=merchant_identifier,
+        elif path == "/authorize/" and request.method == "POST":
+            response = handle_tamara_authorization(
+                request=request,
+                gateway=self.PLUGIN_ID,
+                config=self._get_gateway_config(),
             )
-            cwd = os.path.join(os.path.dirname(__file__))
-            response = requests.post(
-                validation_url,
-                json=payment_data,
-                cert=(
-                    cwd + "/certificate_sandbox.pem",
-                    cwd + "/certificate_sandbox.key",
-                ),
-            )
-            logger.info(msg="Finish validating Apple Pay session")
-            return JsonResponse(data=response.json(), status=response.status_code)
+            logger.info(msg=f"Finish handling {self.PLUGIN_ID} authorize notification")
+            return response if response else HttpResponseNotFound("Not Found")
 
         return HttpResponseNotFound("This path is not valid!")
