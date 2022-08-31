@@ -129,15 +129,21 @@ class TamaraGatewayPlugin(BasePlugin):
         config = self._get_gateway_config()
         api_token = config.connection_params["api_token"]
         base_api_url = f"{get_base_api_url(config=config)}/checkout/payment-types"
+
+        checkout = self.requestor.checkouts.last()
         response = requests.get(
             url=base_api_url,
             headers={"Authorization": f"Bearer {api_token}"},
-            params={"country": "SA", "currency": "SAR", "order_value": 100},
+            params={
+                "currency": checkout.currency,
+                "country": checkout.country.code,
+                "order_value": checkout.total_gross_amount,
+            },
         ).json()
         return [
             {
                 "value": response,
-                "field": "tamara_payment_types",
+                "field": "payment_types",
             }
         ]
 
