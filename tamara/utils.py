@@ -134,7 +134,7 @@ def get_tamara_address_payload(address):
     return address
 
 
-def generate_checkout_session_request_data(amount, payment_information):
+def generate_checkout_session_request_data(config, amount, payment_information):
     from saleor.checkout.calculations import checkout_shipping_price, checkout_total
     from saleor.checkout.fetch import fetch_checkout_info, fetch_checkout_lines
     from saleor.discount.utils import fetch_active_discounts
@@ -151,7 +151,7 @@ def generate_checkout_session_request_data(amount, payment_information):
     cancel_url = payment.get_value_from_metadata("cancel_url")
     success_url = payment.get_value_from_metadata("success_url")
     failure_url = payment.get_value_from_metadata("failure_url")
-    notification_url = payment.get_value_from_metadata("notification_url")
+    notification_url = config.connection_params.get("notification_url")
 
     discounts = fetch_active_discounts()
     lines = fetch_checkout_lines(checkout=payment.checkout)

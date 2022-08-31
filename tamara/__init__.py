@@ -27,6 +27,7 @@ def create_tamara_checkout_session(payment_information, config):
 
     if not error:
         session_data = generate_checkout_session_request_data(
+            config=config,
             payment_information=payment_information,
             amount=float(payment_information.amount),
         )

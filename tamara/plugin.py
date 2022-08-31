@@ -40,6 +40,7 @@ class TamaraGatewayPlugin(BasePlugin):
         {"name": "signature", "value": ""},
         {"name": "api_token", "value": None},
         {"name": "use_sandbox", "value": True},
+        {"name": "notification_url", "value": ""},
         {"name": "notification_token", "value": None},
         {"name": "supported_currencies", "value": "SAR"},
     ]
@@ -70,6 +71,11 @@ class TamaraGatewayPlugin(BasePlugin):
             "help_text": "Tamara Signature",
             "label": "Tamara Signature",
         },
+        "notification_url": {
+            "type": ConfigurationTypeField.STRING,
+            "help_text": "Tamara Notification URL",
+            "label": "Tamara Notification URL",
+        },
     }
 
     def __init__(self, *args, **kwargs):
@@ -82,6 +88,7 @@ class TamaraGatewayPlugin(BasePlugin):
                 "signature": configuration["signature"],
                 "sandbox": configuration["use_sandbox"],
                 "api_token": configuration["api_token"],
+                "notification_url": configuration["notification_url"],
                 "notification_token": configuration["notification_token"],
             },
             supported_currencies=configuration["supported_currencies"],
@@ -99,6 +106,8 @@ class TamaraGatewayPlugin(BasePlugin):
         configuration = {item["name"]: item["value"] for item in configuration}
         if not configuration["api_token"]:
             missing_fields.append("api_token")
+        if not configuration["notification_url"]:
+            missing_fields.append("notification_url")
 
         if plugin_configuration.active and missing_fields:
             error_msg = (
