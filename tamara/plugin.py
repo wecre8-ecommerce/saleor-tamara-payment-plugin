@@ -131,6 +131,8 @@ class TamaraGatewayPlugin(BasePlugin):
         base_api_url = f"{get_base_api_url(config=config)}/checkout/payment-types"
 
         checkout = self.requestor.checkouts.filter(total_gross_amount__gt=0).last()
+        if not checkout:
+            return []
         response = requests.get(
             url=base_api_url,
             headers={"Authorization": f"Bearer {api_token}"},
