@@ -111,7 +111,7 @@ def capture_payment(payment_information, config):
         response = _success_response(
             action_required=False,
             payment_response=tamara_data,
-            kind=TransactionKind.CAPTURE,
+            kind=TransactionKind.CONFIRM,
             token=payment_information.token,
             amount=payment_information.amount,
             currency=payment_information.currency,
@@ -194,11 +194,11 @@ def confirm(payment_information, config):
             payment_info=payment_information,
         )
     else:
-        if tamara_data.get("status") == "authorised":
+        if tamara_data.get("status") == "fully_captured":
             response = _success_response(
                 action_required=False,
                 payment_response=tamara_data,
-                kind=TransactionKind.CONFIRM,
+                kind=TransactionKind.CAPTURE,
                 token=payment_information.token,
                 amount=payment_information.amount,
                 currency=payment_information.currency,
@@ -347,4 +347,27 @@ def handle_tamara_authorization(request: HttpRequest, config, gateway: str):
                     )
                     return HttpResponse("Order not created using the Tamara webhook")
                 else:
-                    return HttpResponse("OK", status=200)
+                    from saleor.payment.gateway import capture
+                    from saleor.plugins.manager import get_plugins_manager
+
+                    manager = get_plugins_manager()
+
+                    capture(
+                        payment=payment,
+                        manager=manager,
+                        amount=payment.total,
+                        channel_slug=payment.checkout.channel.slug,
+                    )
+                    payment.to_confirm = True
+                    payment.captured_amount = payment.total
+                    payment.charge_status = ChargeStatus.FULLY_CHARGED
+                    payment.save(
+                        update_fields=[
+                            "to_confirm",
+                            "charge_status",
+                            "captured_amount",
+                        ]
+                    )
+
+                    return HttpResponse("Payment captured", status=200)
+        return HttpResponse("Payment not found", status=200)
