@@ -6,7 +6,5 @@ setup(
     packages=["tamara"],
     package_dir={"tamara": "tamara"},
     description="Tamara payment plugin integration",
-    entry_points={
-        "saleor.plugins": ["tamara = tamara.plugin:TamaraGatewayPlugin"],
-    },
+    entry_points={"saleor.plugins": ["tamara = tamara.plugin:TamaraGatewayPlugin"],},
 )

@@ -51,9 +51,7 @@ def create_tamara_checkout_session(payment_information, config):
                 amount=payment_information.amount,
                 currency=payment_information.currency,
                 customer_id=get_payment_customer_id(payment_information),
-                action_required_data={
-                    "checkout_url": tamara_data.get("checkout_url"),
-                },
+                action_required_data={"checkout_url": tamara_data.get("checkout_url"),},
             )
             from saleor.payment.models import Payment
 
