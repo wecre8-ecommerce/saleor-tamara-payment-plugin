@@ -175,7 +175,10 @@ def generate_checkout_session_request_data(config, amount, payment_information):
         "is_mobile": is_mobile,
         "payment_type": payment_type,
         "order_reference_id": str(checkout_info.checkout.token),
-        "total_amount": {"amount": amount, "currency": payment_information.currency,},
+        "total_amount": {
+            "amount": amount,
+            "currency": payment_information.currency,
+        },
         "tax_amount": {
             "currency": checkout_total.tax.currency,
             "amount": float(checkout_total.tax.amount),

@@ -51,7 +51,9 @@ def create_tamara_checkout_session(payment_information, config):
                 amount=payment_information.amount,
                 currency=payment_information.currency,
                 customer_id=get_payment_customer_id(payment_information),
-                action_required_data={"checkout_url": tamara_data.get("checkout_url"),},
+                action_required_data={
+                    "checkout_url": tamara_data.get("checkout_url"),
+                },
             )
             from saleor.payment.models import Payment
 
@@ -107,9 +109,9 @@ def capture_payment(payment_information, config):
         )
     else:
         response = _success_response(
-            action_required=False,
+            action_required=True,
             payment_response=tamara_data,
-            kind=TransactionKind.CONFIRM,
+            kind=TransactionKind.CAPTURE,
             token=payment_information.token,
             amount=payment_information.amount,
             currency=payment_information.currency,
@@ -141,7 +143,7 @@ def refund_payment(payment_information, config):
         data=data, config=config, endpoint="/payments/refund"
     )
 
-    if tamara_data.get("errors") and tamara_data.get("refunds"):
+    if tamara_data.get("errors"):
         response = _error_response(
             action_required=False,
             raw_response=tamara_data,
@@ -183,7 +185,7 @@ def confirm(payment_information, config):
         currency=payment_information.currency,
     )
 
-    if tamara_data.get("errors"):
+    if tamara_data.get("errors") or tamara_data.get("status") != "fully_captured":
         response = _error_response(
             action_required=True,
             raw_response=tamara_data,
@@ -194,10 +196,10 @@ def confirm(payment_information, config):
     else:
         if tamara_data.get("status") == "fully_captured":
             response = _success_response(
+                token=tamara_order_id,
                 action_required=False,
                 payment_response=tamara_data,
-                kind=TransactionKind.CAPTURE,
-                token=payment_information.token,
+                kind=TransactionKind.CONFIRM,
                 amount=payment_information.amount,
                 currency=payment_information.currency,
                 customer_id=get_payment_customer_id(payment_information),
@@ -350,22 +352,21 @@ def handle_tamara_authorization(request: HttpRequest, config, gateway: str):
 
                     manager = get_plugins_manager()
 
-                    capture(
+                    transaction = capture(
                         payment=payment,
                         manager=manager,
                         amount=payment.total,
                         channel_slug=payment.checkout.channel.slug,
                     )
-                    payment.to_confirm = True
-                    payment.captured_amount = payment.total
-                    payment.charge_status = ChargeStatus.FULLY_CHARGED
-                    payment.save(
-                        update_fields=[
-                            "to_confirm",
-                            "charge_status",
-                            "captured_amount",
-                        ]
-                    )
+
+                    from saleor.payment.utils import gateway_postprocess
+
+                    gateway_postprocess(transaction, payment)
+
+                    payment.refresh_from_db()
+                    if payment.charge_status == ChargeStatus.FULLY_CHARGED:
+                        payment.to_confirm = True
+                        payment.save(update_fields=["to_confirm"])
 
                     return HttpResponse("Payment captured", status=200)
         return HttpResponse("Payment not found", status=200)

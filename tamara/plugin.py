@@ -145,7 +145,12 @@ class TamaraGatewayPlugin(BasePlugin):
                 "order_value": checkout.total_gross_amount,
             },
         ).json()
-        return [{"value": response, "field": "payment_types",}]
+        return [
+            {
+                "value": response,
+                "field": "payment_types",
+            }
+        ]
 
     @require_active_plugin
     def get_supported_currencies(self, previous_value):
