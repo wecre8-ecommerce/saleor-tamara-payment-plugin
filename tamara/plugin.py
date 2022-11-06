@@ -131,26 +131,29 @@ class TamaraGatewayPlugin(BasePlugin):
         base_api_url = f"{get_base_api_url(config=config)}/checkout/payment-types"
 
         if self.requestor.is_authenticated:
-            checkout = self.requestor.checkouts.filter(total_gross_amount__gt=0).last()
+            checkout = (
+                self.requestor.checkouts.order_by("-last_change")
+                .filter(email=self.requestor.email)
+                .last()
+            )
             if not checkout:
                 return []
-        else:
-            return []
-        response = requests.get(
-            url=base_api_url,
-            headers={"Authorization": f"Bearer {api_token}"},
-            params={
-                "currency": checkout.currency,
-                "country": checkout.country.code,
-                "order_value": checkout.total_gross_amount,
-            },
-        ).json()
-        return [
-            {
-                "value": response,
-                "field": "payment_types",
-            }
-        ]
+            response = requests.get(
+                url=base_api_url,
+                headers={"Authorization": f"Bearer {api_token}"},
+                params={
+                    "currency": checkout.currency,
+                    "country": checkout.country.code,
+                    "order_value": checkout.total_gross_amount,
+                },
+            ).json()
+            return [
+                {
+                    "value": response,
+                    "field": "payment_types",
+                }
+            ]
+        return []
 
     @require_active_plugin
     def get_supported_currencies(self, previous_value):
