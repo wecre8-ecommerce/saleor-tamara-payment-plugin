@@ -117,7 +117,9 @@ def capture_payment(payment_information, config):
             currency=payment_information.currency,
             customer_id=get_payment_customer_id(payment_information),
         )
-        payment.store_value_in_metadata({"capture_id": tamara_data.get("capture_id", "")})
+        payment.store_value_in_metadata(
+            {"capture_id": tamara_data.get("capture_id", "")}
+        )
         payment.save(update_fields=["metadata"])
     return response
 
